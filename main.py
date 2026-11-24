@@ -176,16 +176,11 @@ def main():
     print("\n------------------------------------------------------------")
     print(f"RESULTADOS PARA: {nombre}")
     print("------------------------------------------------------------")
-    print(f"Vector de géneros (R^5):        {vec_gen_np}")
-    print(f"Vector de películas base (R^5): {vec_pel_np}")
-    print(f"Perfil más afín: {usuario_afin}")
-    print(f"  -> Similitud en géneros:        {sim_gen:.4f}")
-    print(f"  -> Similitud en películas base: {sim_pel:.4f}")
-    print(f"  -> Similitud combinada:         {sim_total:.4f}")
+
 
     recs = recomendar_de_15_nuevas(vec_gen_np, idx_afin)
 
-    print(f"\n🎬 Películas recomendadas para ti (de las 15 nuevas):")
+    print(f"\n🎬 Películas recomendadas para ti:")
     for i, (titulo, gen) in enumerate(recs, start=1):
         print(f"  {i}. {titulo} [{gen}]")
     print("============================================================\n")
