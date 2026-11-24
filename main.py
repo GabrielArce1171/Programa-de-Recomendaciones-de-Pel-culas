@@ -1,107 +1,195 @@
 import numpy as np
 
-# 1. Definimos las películas y 5 usuarios base en la base de datos
-peliculas = ["Matrix", "Inception", "Interstellar", "Toy Story", "Shrek", "El Padrino"]
+# ==========================================
+# 1. DEFINICIÓN DE DATOS BASE
+# ==========================================
+
+generos = ["Acción", "Romance", "Comedia", "Ciencia Ficción", "Terror"]
+
+# 5 películas base sobre las que se le preguntará al usuario
+peliculas_base = [
+    "Shrek",
+    "Cómo perder a un hombre en 10 días",
+    "Viernes 13",
+    "Matrix",
+    "Interstellar"
+]
+
+# 5 perfiles de usuarios ya existentes
 usuarios = ["Ana", "Carlos", "Sofía", "Luis", "Diego"]
 
-# 2. Matriz de Calificaciones Base (5 usuarios x 6 películas)
-matriz_calificaciones = np.array([
-    [5, 5, 4, 0, 0, 1],  # Ana
-    [4, 0, 5, 0, 0, 2],  # Carlos
-    [0, 0, 0, 5, 4, 0],  # Sofía
-    [1, 2, 0, 4, 5, 0],  # Luis
-    [5, 4, 0, 0, 1, 4]   # Diego
-])
+# Matriz de gustos por género (5 usuarios x 5 géneros), escala del 0 al 5
+matriz_generos = np.array([
+    [4, 2, 3, 5, 1],  # Ana: le gusta Ciencia Ficción y Acción
+    [5, 1, 2, 4, 2],  # Carlos: muy fan de Acción y Ciencia Ficción
+    [1, 5, 5, 1, 1],  # Sofía: le encantan Romance y Comedia
+    [2, 4, 4, 2, 1],  # Luis: afinidad con Comedia y Romance
+    [3, 1, 2, 2, 5]   # Diego: fanático del Terror y algo de Acción
+], dtype=float)
 
-# 3. Función para calcular la Similitud Coseno entre vectores
+# Matriz de calificaciones de las 5 películas base (5 usuarios x 5 películas), 0 = no vista
+matriz_peliculas_base = np.array([
+    [4, 2, 1, 5, 5],  # Ana
+    [3, 1, 2, 5, 4],  # Carlos
+    [5, 5, 4, 0, 1],  # Sofía
+    [4, 4, 5, 1, 0],  # Luis
+    [2, 1, 5, 4, 2]   # Diego
+], dtype=float)
+
+# Biblioteca de 15 películas nuevas para recomendar: (Título, Género principal)
+catalogo_15_nuevas = [
+    ("Mad Max: Furia en el camino", "Acción"),
+    ("John Wick", "Acción"),
+    ("Gladiador", "Acción"),
+    ("Orgullo y prejuicio", "Romance"),
+    ("Diario de una pasión", "Romance"),
+    ("Antes del amanecer", "Romance"),
+    ("Supercool", "Comedia"),
+    ("¿Qué pasó ayer?", "Comedia"),
+    ("Chicas pesadas", "Comedia"),
+    ("Blade Runner 2049", "Ciencia Ficción"),
+    ("Arrival (La llegada)", "Ciencia Ficción"),
+    ("Duna", "Ciencia Ficción"),
+    ("El Conjuro", "Terror"),
+    ("Hereditary", "Terror"),
+    ("Huye (Get Out)", "Terror")
+]
+
+
+# ==========================================
+# 2. OPERACIONES DE ÁLGEBRA LINEAL
+# ==========================================
+
 def similitud_coseno(v1, v2):
+    """Calcula la similitud coseno entre dos vectores usando producto punto y norma."""
     producto_punto = np.dot(v1, v2)
     norma_v1 = np.linalg.norm(v1)
     norma_v2 = np.linalg.norm(v2)
-    
+
     if norma_v1 == 0 or norma_v2 == 0:
         return 0.0
-    
-    return producto_punto / (norma_v1 * norma_v2)
 
-# 4. Función de recomendación basada en vectores
-def recomendar_peliculas(usuario_idx):
-    usuario_actual = matriz_calificaciones[usuario_idx]
-    mejor_similitud = -1
-    usuario_similar_idx = -1
-    
-    # Comparamos tu vector con todos los demás usuarios de la matriz
-    for i in range(len(matriz_calificaciones)):
-        if i == usuario_idx:
-            continue  # No te compares contigo mismo
-        
-        sim = similitud_coseno(usuario_actual, matriz_calificaciones[i])
-        if sim > mejor_similitud:
-            mejor_similitud = sim
-            usuario_similar_idx = i
-            
-    print(f"\n--------------------------------------------------")
-    print(f"📊 RESULTADOS DEL ANÁLISIS VECTORIAL")
-    print(f"--------------------------------------------------")
-    print(f"Tu perfil (vector en R^6): {usuario_actual}")
-    print(f"Usuario con gustos más afines: {usuarios[usuario_similar_idx]} (Similitud Coseno: {mejor_similitud:.4f})")
-    
-    # Buscamos películas que le gustaron al usuario similar (>= 4) que tú no has visto (== 0)
+    return float(producto_punto / (norma_v1 * norma_v2))
+
+
+def encontrar_usuario_mas_afin(vec_gen_usuario, vec_pel_usuario):
+    """Compara al nuevo usuario contra los 5 perfiles existentes."""
+    mejor_similitud = -1.0
+    mejor_idx = 0
+    mejor_sim_gen = 0.0
+    mejor_sim_pel = 0.0
+
+    # Solo comparamos contra los primeros 5 usuarios preexistentes
+    for i in range(5):
+        sim_gen = similitud_coseno(vec_gen_usuario, matriz_generos[i])
+        sim_pel = similitud_coseno(vec_pel_usuario, matriz_peliculas_base[i])
+
+        # Combinación ponderada (50% géneros, 50% películas base)
+        sim_total = 0.5 * sim_gen + 0.5 * sim_pel
+
+        if sim_total > mejor_similitud:
+            mejor_similitud = sim_total
+            mejor_idx = i
+            mejor_sim_gen = sim_gen
+            mejor_sim_pel = sim_pel
+
+    return mejor_idx, mejor_similitud, mejor_sim_gen, mejor_sim_pel
+
+
+def recomendar_de_15_nuevas(vec_gen_usuario, idx_usuario_afin):
+    """Selecciona películas del catálogo de 15 nuevas según géneros y usuario afín."""
+    # Determinamos los géneros favoritos del usuario nuevo (calificación >= 4)
+    generos_favoritos = [
+        generos[j] for j in range(len(generos)) if vec_gen_usuario[j] >= 4
+    ]
+
+    # Si no marcó ninguno con 4 o 5, tomamos el género con mayor puntaje del usuario afín
+    if not generos_favoritos:
+        idx_gen_afin = int(np.argmax(matriz_generos[idx_usuario_afin]))
+        generos_favoritos = [generos[idx_gen_afin]]
+
     recomendaciones = []
-    for p_idx in range(len(peliculas)):
-        if matriz_calificaciones[usuario_similar_idx][p_idx] >= 4 and usuario_actual[p_idx] == 0:
-            recomendaciones.append(peliculas[p_idx])
-            
-    # Garantía/Fallback: Si por alguna razón la lista está vacía, te recomendamos las mejores del usuario afín
-    if not recomendaciones:
-        for p_idx in range(len(peliculas)):
-            if matriz_calificaciones[usuario_similar_idx][p_idx] >= 3:
-                recomendaciones.append(peliculas[p_idx])
-        # Si aún así estuviera vacío, tomamos las primeras dos
-        if not recomendaciones:
-            recomendaciones = [peliculas[0], peliculas[1]]
-            
+    for titulo, gen in catalogo_15_nuevas:
+        if gen in generos_favoritos:
+            recomendaciones.append((titulo, gen))
+
+    # Garantía: siempre devolvemos al menos 3 recomendaciones del catálogo de 15
+    if len(recomendaciones) < 3:
+        for titulo, gen in catalogo_15_nuevas:
+            if (titulo, gen) not in recomendaciones:
+                recomendaciones.append((titulo, gen))
+            if len(recomendaciones) >= 3:
+                break
+
     return recomendaciones
 
-# --- INTERFAZ INTERACTIVA EN LA TERMINAL ---
+
+def pedir_calificacion(mensaje):
+    """Solicita y valida un número entero del 0 al 5."""
+    while True:
+        try:
+            valor = int(input(mensaje))
+            if 0 <= valor <= 5:
+                return float(valor)
+            print("   ⚠️ Ingresa un número entero entre 0 y 5.")
+        except ValueError:
+            print("   ⚠️ Entrada inválida. Escribe un número del 0 al 5.")
+
+
+# ==========================================
+# 3. INTERFAZ PRINCIPAL EN CONSOLA
+# ==========================================
+
+def main():
+    global matriz_generos, matriz_peliculas_base
+
+    print("============================================================")
+    print("   SISTEMA DE RECOMENDACIÓN DE PELÍCULAS - ÁLGEBRA LINEAL  ")
+    print("============================================================")
+
+    nombre = input("\nIngresa tu nombre: ").strip()
+    if not nombre:
+        nombre = "Invitado"
+
+    print(f"\n¡Hola, {nombre}! Califica del 0 al 5 qué tanto te gustan estos 5 GÉNEROS:")
+    vec_gen = []
+    for g in generos:
+        val = pedir_calificacion(f"  - {g} (0-5): ")
+        vec_gen.append(val)
+    vec_gen_np = np.array(vec_gen)
+
+    print(f"\nAhora dime tu opinión (del 0 al 5; usa 0 si no la has visto) sobre estas 5 PELÍCULAS:")
+    vec_pel = []
+    for p in peliculas_base:
+        val = pedir_calificacion(f"  - {p} (0-5): ")
+        vec_pel.append(val)
+    vec_pel_np = np.array(vec_pel)
+
+    # Actualizamos dinámicamente las matrices agregando al nuevo usuario
+    usuarios.append(nombre)
+    matriz_generos = np.vstack([matriz_generos, vec_gen_np])
+    matriz_peliculas_base = np.vstack([matriz_peliculas_base, vec_pel_np])
+
+    idx_afin, sim_total, sim_gen, sim_pel = encontrar_usuario_mas_afin(vec_gen_np, vec_pel_np)
+    usuario_afin = usuarios[idx_afin]
+
+    print("\n------------------------------------------------------------")
+    print(f"RESULTADOS PARA: {nombre}")
+    print("------------------------------------------------------------")
+    print(f"Vector de géneros (R^5):        {vec_gen_np}")
+    print(f"Vector de películas base (R^5): {vec_pel_np}")
+    print(f"Perfil más afín: {usuario_afin}")
+    print(f"  -> Similitud en géneros:        {sim_gen:.4f}")
+    print(f"  -> Similitud en películas base: {sim_pel:.4f}")
+    print(f"  -> Similitud combinada:         {sim_total:.4f}")
+
+    recs = recomendar_de_15_nuevas(vec_gen_np, idx_afin)
+
+    print(f"\n🎬 Películas recomendadas para ti (de las 15 nuevas):")
+    for i, (titulo, gen) in enumerate(recs, start=1):
+        print(f"  {i}. {titulo} [{gen}]")
+    print("============================================================\n")
+
+
 if __name__ == "__main__":
-    print("==================================================")
-    print("   SISTEMA DE RECOMENDACIÓN DE CINE (ÁLGEBRA)     ")
-    print("==================================================")
-    
-    # Pedir nombre del usuario
-    nombre_usuario = input("¿Cuál es tu nombre?: ").strip()
-    if not nombre_usuario:
-        nombre_usuario = "Usuario_Invitado"
-        
-    print(f"\n¡Hola, {nombre_usuario}! Para calcular tus recomendaciones,")
-    print("califica las siguientes películas del 0 al 5.")
-    print("(Usa 0 si no la has visto o no te llama la atención).\n")
-    
-    nuevo_vector = []
-    for pelicula in peliculas:
-        while True:
-            try:
-                calificacion = int(input(f"  -> ¿Qué calificación le das a '{pelicula}' (0-5)?: "))
-                if 0 <= calificacion <= 5:
-                    nuevo_vector.append(calificacion)
-                    break
-                else:
-                    print("     ⚠️ Ingresa un número válido entre 0 y 5.")
-            except ValueError:
-                print("     ⚠️ Error: Debes ingresar un número entero.")
-                
-    # 5. Agregar el nuevo usuario y expandir la matriz usando NumPy (vstack)
-    usuarios.append(nombre_usuario)
-    matriz_calificaciones = np.vstack([matriz_calificaciones, np.array(nuevo_vector)])
-    
-    # Tu índice será el último elemento de la matriz
-    tu_indice = len(usuarios) - 1
-    
-    # Generar y mostrar recomendaciones
-    peliculas_recomendadas = recomendar_peliculas(tu_indice)
-    
-    print(f"\n🎬 Películas recomendadas especialmente para ti, {nombre_usuario}:")
-    for idx, peli in enumerate(peliculas_recomendadas, 1):
-        print(f"   {idx}. ⭐ {peli}")
-    print("==================================================\n")
+    main()
